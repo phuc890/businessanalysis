@@ -191,22 +191,26 @@ export default function App() {
     return s;
   }, [rows]);
 
-  const visibleRows = useMemo(() => {
-    return rows.filter(row => {
-      if (!row.parentId) return true;
-      let pid = row.parentId;
-      while (pid) {
-  if (collapsed[pid]) return false;
-
-  const parent = rows.find(function(rowItem) {
-    return rowItem.id === pid;
+ const visibleRows = useMemo(() => {
+  // Tạo map id → row để tránh find() trong loop
+  const rowMap = {};
+  rows.forEach(r => {
+    rowMap[r.id] = r;
   });
 
-  pid = parent ? parent.parentId : null;
-}
-      return true;
-    });
-  }, [rows, collapsed]);
+  return rows.filter(row => {
+    if (!row.parentId) return true;
+
+    let pid = row.parentId;
+
+    while (pid) {
+      if (collapsed[pid]) return false;
+      pid = rowMap[pid]?.parentId || null;
+    }
+
+    return true;
+  });
+}, [rows, collapsed]);
 
   const toggleCollapse = (id) => setCollapsed(prev => ({ ...prev, [id]: !prev[id] }));
 
