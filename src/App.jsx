@@ -196,10 +196,14 @@ export default function App() {
       if (!row.parentId) return true;
       let pid = row.parentId;
       while (pid) {
-        if (collapsed[pid]) return false;
-        const parent = rows.find(r => r.id === pid);
-        pid = parent ? parent.parentId : null;
-      }
+  if (collapsed[pid]) return false;
+
+  const parent = rows.find(function(rowItem) {
+    return rowItem.id === pid;
+  });
+
+  pid = parent ? parent.parentId : null;
+}
       return true;
     });
   }, [rows, collapsed]);
