@@ -9,10 +9,12 @@ export default async function handler(req, res) {
   };
 
   try {
-    const response = await fetch(urls[type]);
-    const data = await response.json();
-    res.status(200).json(data);
+    const apiRes = await fetch(urls[type]);
+    const data = await apiRes.json();
+    
+    // Gửi dữ liệu về trình duyệt
+    return res.status(200).json(data);
   } catch (error) {
-    res.status(500).json({ error: "Lỗi kết nối dữ liệu TCBS" });
+    return res.status(500).json({ error: "Lỗi hệ thống" });
   }
 }
