@@ -116,7 +116,6 @@ function buildRatios(items, headers) {
 }
 
 const INDENT = { 0: 0, 1: 16, 2: 32, 3: 48 };
-const TABS = ["Cân đối kế toán", "Kết quả kinh doanh", "LCTT trực tiếp", "Chỉ số tài chính"];
 const TYPE_MAP = {
   "Cân đối kế toán": "balancesheet",
   "Kết quả kinh doanh": "incomestatement",
