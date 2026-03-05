@@ -173,9 +173,9 @@ export default function App() {
 
     const typeKey = TYPE_MAP[activeTab];
     const raw = cached[typeKey];
-    if (!raw || !raw.listFinancialRatio && !raw.listBalanceSheet && !raw.listIncomeStatement && !raw.listCashFlow) {
-      return { rows: [], headers: [] };
-    }
+if (!raw || (!raw.listFinancialRatio && !raw.listBalanceSheet && !raw.listIncomeStatement && !raw.listCashFlow)) {
+  return { rows: [], headers: [] };
+}
 
     // TCBS returns different array keys per endpoint
     const listKey = {
