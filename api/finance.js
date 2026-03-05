@@ -1,43 +1,21 @@
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET");
-
+  // Lấy các thông tin người dùng gửi lên (mã cổ phiếu, loại báo cáo...)
   const { ticker, type, yearly, size } = req.query;
-
-  if (!ticker || !type) {
-    return res.status(400).json({ error: "Missing ticker or type" });
-  }
-
-  const isYearly = yearly === "0" ? 0 : 1;
-  const numSize = size || 10;
-
-  const endpoints = {
-    balancesheet:    `https://apipubaws.tcbs.com.vn/tcanalysis/v1/finance/${ticker}/balancesheet?yearly=${isYearly}&size=${numSize}`,
-    incomestatement: `https://apipubaws.tcbs.com.vn/tcanalysis/v1/finance/${ticker}/incomestatement?yearly=${isYearly}&size=${numSize}`,
-    cashflow:        `https://apipubaws.tcbs.com.vn/tcanalysis/v1/finance/${ticker}/cashflow?yearly=${isYearly}&size=${numSize}`,
-    ratio:           `https://apipubaws.tcbs.com.vn/tcanalysis/v1/finance/${ticker}/financialratio?yearly=${isYearly}&size=${numSize}`,
+  
+  // Các đường dẫn bí mật để lấy dữ liệu từ TCBS
+  const urls = {
+    balancesheet: `https://apipublichv.tcbs.com.vn/tcanalysis/v1/finance/balancesheet?ticker=${ticker}&isYearly=${yearly}&size=${size}`,
+    incomestatement: `https://apipublichv.tcbs.com.vn/tcanalysis/v1/finance/incomestatement?ticker=${ticker}&isYearly=${yearly}&size=${size}`,
+    cashflow: `https://apipublichv.tcbs.com.vn/tcanalysis/v1/finance/cashflow?ticker=${ticker}&isYearly=${yearly}&size=${size}`,
+    ratio: `https://apipublichv.tcbs.com.vn/tcanalysis/v1/finance/financialratio?ticker=${ticker}&isYearly=${yearly}&size=${size}`
   };
 
-  const url = endpoints[type];
-  if (!url) {
-    return res.status(400).json({ error: "Invalid type" });
-  }
-
   try {
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      return res.status(response.status).json({ error: "TCBS API error" });
-    }
-
+    const response = await fetch(urls[type]);
     const data = await response.json();
-    return res.status(200).json(data);
-  } catch (err) {
-    return res.status(500).json({ error: "Fetch failed", detail: err.message });
+    // Trả dữ liệu về cho trình duyệt của bạn
+    res.status(200).json(data);
+  } catch (error) {
+    res.status(500).json({ error: "Lỗi không lấy được dữ liệu từ TCBS" });
   }
 }
