@@ -2,12 +2,10 @@ import { useState, useMemo, useEffect } from "react";
 
 const TABS = ["Cân đối kế toán", "Kết quả kinh doanh", "LCTT trực tiếp", "Chỉ số tài chính"];
 
-// Helpers định dạng số
 const fmt = (v) => {
   if (v === null || v === undefined || v === "") return "-";
   const n = parseFloat(v);
-  if (isNaN(n)) return "-";
-  return n.toLocaleString("en-US");
+  return isNaN(n) ? "-" : n.toLocaleString("en-US");
 };
 
 const TYPE_MAP = {
@@ -20,11 +18,11 @@ const TYPE_MAP = {
 export default function App() {
   const [activeTab, setActiveTab] = useState("Kết quả kinh doanh");
   const [ticker, setTicker] = useState("MWG");
-  const [period, setPeriod] = useState("yearly");
+  const [period, setPeriod] = useState("yearly"); // "yearly" hoặc "quarterly"
   const [allData, setAllData] = useState({});
   const [loading, setLoading] = useState(false);
 
-  // Tự động tải dữ liệu khi vừa mở Web
+  // Tự động tải dữ liệu khi mở trang
   useEffect(() => {
     loadData();
   }, []);
@@ -33,38 +31,40 @@ export default function App() {
     setLoading(true);
     try {
       const types = ["balancesheet", "incomestatement", "cashflow", "ratio"];
-      const isYearlyParam = period === "yearly" ? 1 : 0;
+      // FIX: Xác định yearlyParam chuẩn 0 hoặc 1
+      const yearlyParam = period === "yearly" ? 1 : 0;
       
       const results = await Promise.all(
         types.map(type =>
-          fetch(`/api/finance?ticker=${ticker}&type=${type}&yearly=${isYearlyParam}&size=10`)
-            .then(r => r.json())
+          fetch(`/api/finance?ticker=${ticker}&type=${type}&yearly=${yearlyParam}&size=10`)
+            .then(res => res.json())
         )
       );
 
-      const newCache = {
-        balancesheet: results[0],
-        incomestatement: results[1],
-        cashflow: results[2],
-        ratio: results[3]
-      };
-
-      setAllData(prev => ({ ...prev, [`${ticker}-${period}`]: newCache }));
+      setAllData(prev => ({
+        ...prev,
+        [`${ticker}-${period}`]: {
+          balancesheet: results[0],
+          incomestatement: results[1],
+          cashflow: results[2],
+          ratio: results[3]
+        }
+      }));
     } catch (e) {
-      console.error("Lỗi tải dữ liệu:", e);
+      console.error("Lỗi fetch:", e);
     }
     setLoading(false);
   }
 
   const { rows, headers } = useMemo(() => {
-    const cached = allData[`${ticker}-${period}`];
-    if (!cached) return { rows: [], headers: [] };
+    const dataObj = allData[`${ticker}-${period}`];
+    if (!dataObj) return { rows: [], headers: [] };
 
     const typeKey = TYPE_MAP[activeTab];
-    const raw = cached[typeKey];
+    const rawData = dataObj[typeKey];
 
-    // Sửa lỗi logic mix || và && bằng cách dùng ngoặc đơn rõ ràng
-    if (!raw || (!raw.listFinancialRatio && !raw.listBalanceSheet && !raw.listIncomeStatement && !raw.listCashFlow)) {
+    // FIX: Bọc ngoặc đơn để Vercel build không lỗi logic
+    if (!rawData || (!rawData.listFinancialRatio && !rawData.listBalanceSheet && !rawData.listIncomeStatement && !rawData.listCashFlow)) {
       return { rows: [], headers: [] };
     }
 
@@ -75,83 +75,76 @@ export default function App() {
       ratio: "listFinancialRatio",
     }[typeKey];
 
-    const list = raw[listKey] || [];
+    const list = rawData[listKey] || [];
     if (list.length === 0) return { rows: [], headers: [] };
 
-    // Lấy danh sách các năm/quý làm tiêu đề cột
-    const sortedHeaders = list
-      .map(item => (period === "yearly" ? (item.year || item.fiscalYear) : `Q${item.quarter}-${item.year}`))
-      .reverse()
-      .slice(-5);
+    // Lấy 5 kỳ gần nhất
+    const displayList = [...list].reverse().slice(-5);
+    const head = displayList.map(item => (period === "yearly" ? (item.year || item.fiscalYear) : `Q${item.quarter}-${item.year}`));
 
-    // Tạo dữ liệu mẫu cho bảng (Bạn có thể thêm các chỉ tiêu khác vào đây)
-    const labels = typeKey === "incomestatement" 
-      ? [{ lab: "Doanh thu thuần", key: "revenue" }, { lab: "Lợi nhuận gộp", key: "grossProfit" }, { lab: "LN sau thuế", key: "postTaxProfit" }]
-      : [{ lab: "Tổng tài sản", key: "asset" }, { lab: "Vốn chủ sở hữu", key: "equity" }];
+    // Định nghĩa các hàng hiển thị tùy theo Tab
+    let rowConfigs = [];
+    if (typeKey === "incomestatement") {
+      rowConfigs = [
+        { label: "Doanh thu thuần", key: "revenue" },
+        { label: "Lợi nhuận gộp", key: "grossProfit" },
+        { label: "LN sau thuế", key: "postTaxProfit" }
+      ];
+    } else if (typeKey === "balancesheet") {
+      rowConfigs = [
+        { label: "Tổng tài sản", key: "asset" },
+        { label: "Nợ phải trả", key: "debt" },
+        { label: "Vốn chủ sở hữu", key: "equity" }
+      ];
+    } else {
+      rowConfigs = [{ label: "Giá trị", key: Object.keys(displayList[0])[0] }]; // Dự phòng
+    }
 
-    const builtRows = labels.map(rowDef => ({
-      label: rowDef.lab,
-      vals: list.slice(0, 5).reverse().map(item => fmt(item[rowDef.key]))
+    const builtRows = rowConfigs.map(cfg => ({
+      label: cfg.label,
+      vals: displayList.map(item => fmt(item[cfg.key]))
     }));
 
-    return { rows: builtRows, headers: sortedHeaders };
+    return { rows: builtRows, headers: head };
   }, [allData, activeTab, ticker, period]);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0d0f14", color: "#fff", padding: "20px", fontFamily: "sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#0d0f14", color: "#fff", padding: "20px", fontFamily: "Arial" }}>
       <div style={{ marginBottom: "20px", display: "flex", gap: "10px" }}>
         <input 
           value={ticker} 
           onChange={e => setTicker(e.target.value.toUpperCase())} 
-          style={{ background: "#1a2035", color: "#fff", border: "1px solid #2a3550", padding: "8px", borderRadius: "4px" }} 
+          style={{ background: "#1a2035", color: "#fff", border: "1px solid #2a3550", padding: "8px" }} 
         />
-        <button 
-          onClick={loadData} 
-          style={{ background: "#2563eb", border: "none", color: "#fff", padding: "8px 16px", cursor: "pointer", borderRadius: "4px" }}
-        >
+        <button onClick={loadData} style={{ background: "#2563eb", color: "#fff", border: "none", padding: "8px 15px", cursor: "pointer" }}>
           {loading ? "Đang tải..." : "Tải dữ liệu"}
         </button>
       </div>
 
       <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
         {TABS.map(t => (
-          <button 
-            key={t} 
-            onClick={() => setActiveTab(t)} 
-            style={{ 
-              background: activeTab === t ? "#2563eb" : "transparent", 
-              border: "1px solid #2563eb", 
-              color: "#fff", 
-              padding: "8px 12px", 
-              cursor: "pointer",
-              borderRadius: "4px"
-            }}
-          >
+          <button key={t} onClick={() => setActiveTab(t)} style={{ background: activeTab === t ? "#2563eb" : "#1e293b", color: "#fff", border: "1px solid #334155", padding: "8px 12px", cursor: "pointer" }}>
             {t}
           </button>
         ))}
       </div>
 
-      <div style={{ overflowX: "auto", background: "#161b2d", borderRadius: "8px", padding: "10px" }}>
+      <div style={{ background: "#161b2d", padding: "15px", borderRadius: "8px" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
-            <tr style={{ textAlign: "left", color: "#94a3b8", borderBottom: "2px solid #2d3748" }}>
-              <th style={{ padding: "12px" }}>Chỉ tiêu</th>
-              {headers.map(h => <th key={h} style={{ textAlign: "right", padding: "12px" }}>{h}</th>)}
+            <tr style={{ borderBottom: "2px solid #2d3748", textAlign: "right" }}>
+              <th style={{ textAlign: "left", padding: "10px" }}>Chỉ tiêu</th>
+              {headers.map(h => <th key={h} style={{ padding: "10px" }}>{h}</th>)}
             </tr>
           </thead>
           <tbody>
             {rows.length > 0 ? rows.map((r, i) => (
-              <tr key={i} style={{ borderBottom: "1px solid #2d3748" }}>
-                <td style={{ padding: "12px" }}>{r.label}</td>
-                {r.vals.map((v, j) => <td key={j} style={{ textAlign: "right", padding: "12px" }}>{v}</td>)}
+              <tr key={i} style={{ borderBottom: "1px solid #2d3748", textAlign: "right" }}>
+                <td style={{ textAlign: "left", padding: "10px" }}>{r.label}</td>
+                {r.vals.map((v, j) => <td key={j} style={{ padding: "10px" }}>{v}</td>)}
               </tr>
             )) : (
-              <tr>
-                <td colSpan={headers.length + 1} style={{ textAlign: "center", padding: "20px", color: "#64748b" }}>
-                  Chưa có dữ liệu. Hãy nhấn "Tải dữ liệu".
-                </td>
-              </tr>
+              <tr><td colSpan={6} style={{ textAlign: "center", padding: "30px" }}>Chưa có dữ liệu cho mã này.</td></tr>
             )}
           </tbody>
         </table>
